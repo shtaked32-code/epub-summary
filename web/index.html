@@ -84,6 +84,14 @@
       text-align: center;
       cursor: pointer;
       transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    #drop-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      border-radius: 8px;
+      cursor: pointer;
     }
     #drop-zone:hover, #drop-zone.drag-over {
       border-color: var(--primary);
@@ -363,6 +371,7 @@
       <div class="card-body">
 
         <div id="drop-zone">
+          <div id="drop-overlay"></div>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 12px">
             <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/>
           </svg>
@@ -461,34 +470,33 @@
 
   // ── Drag & Drop ───────────────────────────────────────
   const dropZone = document.getElementById("drop-zone");
+  const overlay  = document.getElementById("drop-overlay");
   const fileInput = document.getElementById("file-input");
 
-  // Визуальная подсветка на уровне документа (нет проблем с дочерними элементами)
+  // Визуальная подсветка — на уровне документа
   document.addEventListener("dragenter", e => {
-    if (e.dataTransfer?.types?.includes("Files")) {
+    if (e.dataTransfer?.types?.includes("Files"))
       dropZone.classList.add("drag-over");
-    }
   });
   document.addEventListener("dragleave", e => {
     if (e.relatedTarget === null) dropZone.classList.remove("drag-over");
   });
-
-  // Обязательно — иначе браузер откроет файл
   document.addEventListener("dragover", e => e.preventDefault());
   document.addEventListener("drop",     e => e.preventDefault());
 
-  // Safari требует обработки drop именно на целевом элементе,
-  // иначе dataTransfer.files оказывается пустым.
-  dropZone.addEventListener("dragover", e => e.preventDefault());
-  dropZone.addEventListener("drop", e => {
+  // Overlay — единственный реальный drop-target.
+  // Safari требует preventDefault на том элементе, над которым находится курсор.
+  // Overlay перекрывает SVG и текст, устраняя проблему дочерних элементов.
+  overlay.addEventListener("dragover", e => e.preventDefault());
+  overlay.addEventListener("drop", e => {
     e.preventDefault();
-    e.stopPropagation();          // не даём всплыть до document-обработчика
+    e.stopPropagation();
     dropZone.classList.remove("drag-over");
     const f = e.dataTransfer.files[0];
     if (f && f.name.toLowerCase().endsWith(".epub")) setFile(f);
   });
+  overlay.addEventListener("click", () => fileInput.click());
 
-  dropZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     if (fileInput.files[0]) setFile(fileInput.files[0]);
   });
