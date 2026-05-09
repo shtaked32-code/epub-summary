@@ -1,0 +1,20 @@
+# epub files and results
+*.epub
+*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# Directories that look like unpacked epubs
+1212.epub/
+123123.epub/
+0001.epub/
+Волхв.epub/
