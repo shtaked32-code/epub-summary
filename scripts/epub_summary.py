@@ -325,33 +325,47 @@ def generate_key_ideas(context: str, metadata: dict, lang: str, detail: str) -> 
 def generate_verdict(context: str, metadata: dict, lang: str) -> str:
     if lang == "ru":
         system = (
-            "Ты литературный критик. "
+            "Ты беспощадный литературный критик с высокими стандартами. "
             "Пиши ТОЛЬКО на русском языке. "
             "Давай ТОЛЬКО запрошенный текст — никаких вопросов, вариантов, предложений помочь, "
-            "markdown-заголовков (#, ##), списков со звёздочками или дефисами."
+            "markdown-заголовков (#, ##), списков со звёздочками или дефисами. "
+            "Большинство книг не заслуживают прочтения — они повторяют чужие идеи, "
+            "переполнены водой и не дают ничего нового. Будь честен и беспощаден."
         )
         prompt = (
-            f"ЗАДАНИЕ: дай короткий вердикт — стоит ли читать книгу.\n"
+            f"ЗАДАНИЕ: вынеси жёсткий вердикт — стоит ли тратить время на эту книгу.\n"
             f"Книга: «{metadata['title']}», автор: {metadata['author']}.\n\n"
             f"Фрагменты глав:\n{context}\n\n"
+            f"Критерии для «ДА» — книга должна соответствовать хотя бы двум из трёх:\n"
+            f"1. Даёт оригинальные идеи, которых нет в других источниках.\n"
+            f"2. Меняет способ мышления или даёт конкретные работающие инструменты.\n"
+            f"3. Написана настолько хорошо, что сам стиль оправдывает чтение.\n\n"
+            f"Если книга — пересказ известного, мотивационная вода или саморeklama автора — это «НЕТ».\n\n"
             f"Напиши ровно два абзаца:\n"
             f"1. Первый абзац начинается со слова «ДА» или «НЕТ» и содержит вердикт (1–2 предложения).\n"
-            f"2. Второй абзац — объяснение, почему принято такое решение (2–3 предложения)."
+            f"2. Второй абзац — конкретное объяснение с указанием слабых или сильных мест (2–3 предложения)."
         )
     else:
         system = (
-            "You are a literary critic. "
+            "You are a ruthless literary critic with high standards. "
             "Write ONLY in English. "
             "Provide ONLY the requested text — no questions, options, offers to help, "
-            "markdown headers (#, ##), bullet points, or dashes."
+            "markdown headers (#, ##), bullet points, or dashes. "
+            "Most books are not worth reading — they rehash existing ideas, are padded with filler, "
+            "and offer nothing new. Be honest and unsparing."
         )
         prompt = (
-            f"TASK: give a short verdict — is the book worth reading?\n"
+            f"TASK: give a harsh verdict — is this book worth the reader's time?\n"
             f"Book: \"{metadata['title']}\", author: {metadata['author']}.\n\n"
             f"Chapter excerpts:\n{context}\n\n"
+            f"Criteria for \"YES\" — the book must meet at least two of three:\n"
+            f"1. Provides original ideas not found elsewhere.\n"
+            f"2. Changes how you think or offers concrete, actionable tools.\n"
+            f"3. Written so well that the style alone justifies reading.\n\n"
+            f"If the book is a rehash of known ideas, motivational filler, or self-promotion — that's a \"NO\".\n\n"
             f"Write exactly two paragraphs:\n"
             f"1. The first paragraph starts with \"YES\" or \"NO\" and states the verdict (1–2 sentences).\n"
-            f"2. The second paragraph explains why (2–3 sentences)."
+            f"2. The second paragraph gives a specific explanation citing concrete strengths or weaknesses (2–3 sentences)."
         )
     return ask_model(system, prompt)
 
