@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Epub Анализатор</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f1f5f9;
+      --surface:   #ffffff;
+      --border:    #e2e8f0;
+      --primary:   #2563eb;
+      --primary-h: #1d4ed8;
+      --success:   #16a34a;
+      --error:     #dc2626;
+      --text:      #0f172a;
+      --muted:     #64748b;
+      --radius:    12px;
+      --shadow:    0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.06);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Шапка ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    header h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+    header span { font-size: 13px; color: var(--muted); }
+
+    /* ── Макет ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+      padding: 24px 32px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; padding: 16px; }
+    }
+
+    /* ── Карточка ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .card-body { padding: 20px; }
+
+    /* ── Зона загрузки ── */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+    #drop-zone.has-file {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+    #drop-zone svg { color: var(--muted); margin-bottom: 10px; }
+    #drop-zone.has-file svg { color: var(--primary); }
+    #drop-zone p { font-size: 14px; color: var(--muted); line-height: 1.5; }
+    #drop-zone p strong { color: var(--text); }
+    #drop-zone small { font-size: 12px; color: var(--muted); }
+    #file-input { display: none; }
+
+    /* ── Настройки ── */
+    .settings { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; }
+    .setting-row label { font-size: 14px; font-weight: 500; }
+
+    .toggle-group {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .toggle-group button {
+      flex: 1;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--muted);
+      transition: background .15s, color .15s;
+    }
+    .toggle-group button.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* ── Кнопка анализа ── */
+    #analyze-btn {
+      width: 100%;
+      margin-top: 18px;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    #analyze-btn:hover:not(:disabled) { background: var(--primary-h); }
+    #analyze-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Прогресс ── */
+    #progress-section { display: none; margin-top: 20px; }
+    #progress-section.visible { display: block; }
+
+    .book-info { margin-bottom: 12px; }
+    .book-info .book-title { font-size: 15px; font-weight: 600; }
+    .book-info .book-author { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .progress-bar-wrap {
+      height: 8px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--primary);
+      transition: width .4s ease;
+      width: 0%;
+    }
+    .progress-bar-fill.done { background: var(--success); }
+    .progress-bar-fill.error { background: var(--error); }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .progress-msg { margin-top: 10px; font-size: 13px; color: var(--text); }
+
+    .done-actions { margin-top: 14px; display: none; }
+    .done-actions.visible { display: flex; gap: 10px; }
+    .btn-outline {
+      flex: 1;
+      padding: 9px;
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .btn-outline:hover { background: var(--primary); color: #fff; }
+
+    /* ── Библиотека ── */
+    .library-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #refresh-btn {
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    #refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    #books-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .book-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s, transform .15s;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .book-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 16px rgba(37,99,235,.12);
+      transform: translateY(-2px);
+    }
+    .book-card .bc-icon { font-size: 28px; line-height: 1; }
+    .book-card .bc-title {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-top: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .book-card .bc-author {
+      font-size: 12px;
+      color: var(--muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .book-card .bc-file {
+      font-size: 11px;
+      color: var(--border);
+      margin-top: auto;
+      padding-top: 8px;
+    }
+
+    .empty-state {
+      grid-column: 1/-1;
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .empty-state div { font-size: 40px; margin-bottom: 12px; }
+
+    /* ── Модальное окно ── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,.4);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    #modal-overlay.visible { display: flex; }
+
+    #modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      flex-direction: column;
+    }
+    #modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    #modal-header .modal-titles { flex: 1; min-width: 0; }
+    #modal-header h2 { font-size: 17px; font-weight: 700; }
+    #modal-header p { font-size: 13px; color: var(--muted); margin-top: 3px; }
+    #modal-close {
+      width: 32px; height: 32px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      font-size: 20px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    #modal-close:hover { background: var(--bg); }
+    #modal-content {
+      padding: 24px;
+      overflow-x: auto;
+    }
+    #modal-content pre {
+      font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+  </svg>
+  <h1>Epub Анализатор</h1>
+  <span>— локальный анализ книг через Ollama</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── Левая панель ─────────────────────────────── -->
+  <aside>
+    <div class="card">
+      <div class="card-head">Загрузка книги</div>
+      <div class="card-body">
+
+        <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 12px">
+            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/>
+          </svg>
+          <p id="drop-text"><strong>Перетащите .epub</strong> сюда<br>или кликните для выбора файла</p>
+          <small id="drop-hint" style="display:block;margin-top:6px">Поддерживается формат .epub</small>
+        </div>
+        <input type="file" id="file-input" accept=".epub" />
+
+        <div class="settings">
+          <div class="setting-row">
+            <label>Язык результата</label>
+            <div class="toggle-group">
+              <button class="active" data-lang="ru" onclick="setLang('ru')">RU</button>
+              <button data-lang="en" onclick="setLang('en')">EN</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label>Детализация</label>
+            <div class="toggle-group">
+              <button class="active" data-detail="short" onclick="setDetail('short')">Краткая</button>
+              <button data-detail="full" onclick="setDetail('full')">Полная</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="analyze-btn" disabled onclick="startAnalysis()">
+          Выбрать файл
+        </button>
+
+        <!-- Прогресс -->
+        <div id="progress-section">
+          <div class="book-info">
+            <div class="book-title" id="prog-title">Читаю книгу…</div>
+            <div class="book-author" id="prog-author"></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="prog-bar"></div>
+          </div>
+          <div class="progress-meta">
+            <span id="prog-msg">Инициализация…</span>
+            <span id="prog-pct">0%</span>
+          </div>
+          <div class="done-actions" id="done-actions">
+            <button class="btn-outline" id="view-result-btn" onclick="viewLastResult()">Смотреть результат</button>
+            <button class="btn-outline" onclick="resetForm()">Новая книга</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Правая панель (библиотека) ──────────────── -->
+  <main>
+    <div class="card">
+      <div class="card-head library-head">
+        <span>Обработанные книги</span>
+        <button id="refresh-btn" onclick="loadBooks()">↻ Обновить</button>
+      </div>
+      <div class="card-body">
+        <div id="books-grid">
+          <div class="empty-state">
+            <div>📚</div>
+            Загрузите книгу, чтобы начать
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ── Модальное окно ─────────────────────────────── -->
+<div id="modal-overlay" onclick="maybeCloseModal(event)">
+  <div id="modal">
+    <div id="modal-header">
+      <div class="modal-titles">
+        <h2 id="modal-title">—</h2>
+        <p id="modal-author">—</p>
+      </div>
+      <button id="modal-close" onclick="closeModal()" title="Закрыть">✕</button>
+    </div>
+    <div id="modal-content">
+      <pre id="modal-pre"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Состояние ─────────────────────────────────────────
+  let selectedFile = null;
+  let currentLang = "ru";
+  let currentDetail = "short";
+  let lastResultFilename = null;
+  let currentSSE = null;
+
+  // ── Drag & Drop ───────────────────────────────────────
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+
+  dropZone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.endsWith(".epub")) setFile(f);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(f) {
+    selectedFile = f;
+    dropZone.classList.add("has-file");
+    document.getElementById("drop-text").innerHTML =
+      `<strong>${escHtml(f.name)}</strong>`;
+    document.getElementById("drop-hint").textContent =
+      `${(f.size / 1024 / 1024).toFixed(1)} МБ`;
+    const btn = document.getElementById("analyze-btn");
+    btn.disabled = false;
+    btn.textContent = "Анализировать →";
+  }
+
+  // ── Переключатели ─────────────────────────────────────
+  function setLang(v) {
+    currentLang = v;
+    document.querySelectorAll("[data-lang]").forEach(b =>
+      b.classList.toggle("active", b.dataset.lang === v));
+  }
+  function setDetail(v) {
+    currentDetail = v;
+    document.querySelectorAll("[data-detail]").forEach(b =>
+      b.classList.toggle("active", b.dataset.detail === v));
+  }
+
+  // ── Запуск анализа ────────────────────────────────────
+  async function startAnalysis() {
+    if (!selectedFile) return;
+
+    // Блокируем кнопку
+    const btn = document.getElementById("analyze-btn");
+    btn.disabled = true;
+    btn.textContent = "Отправляю файл…";
+
+    // Показываем прогресс
+    const section = document.getElementById("progress-section");
+    section.classList.add("visible");
+    document.getElementById("done-actions").classList.remove("visible");
+    setProgress(0, "Отправляю файл на сервер…", "running");
+    document.getElementById("prog-title").textContent = selectedFile.name;
+    document.getElementById("prog-author").textContent = "";
+    lastResultFilename = null;
+
+    // Загружаем файл
+    const form = new FormData();
+    form.append("file", selectedFile);
+    form.append("lang", currentLang);
+    form.append("detail", currentDetail);
+
+    let jobId;
+    try {
+      const res = await fetch("/api/analyze", { method: "POST", body: form });
+      const data = await res.json();
+      jobId = data.job_id;
+    } catch (err) {
+      setProgress(100, "Ошибка соединения с сервером", "error");
+      btn.disabled = false;
+      btn.textContent = "Попробовать снова";
+      return;
+    }
+
+    // Подписываемся на SSE
+    if (currentSSE) currentSSE.close();
+    currentSSE = new EventSource(`/api/progress/${jobId}`);
+    currentSSE.onmessage = e => handleProgress(JSON.parse(e.data));
+    currentSSE.onerror = () => {
+      setProgress(100, "Потеряно соединение с сервером", "error");
+      currentSSE.close();
+    };
+  }
+
+  function handleProgress(ev) {
+    const pct  = ev.percent ?? 0;
+    const msg  = ev.message ?? "";
+    const status = ev.status ?? "running";
+
+    if (ev.title) {
+      document.getElementById("prog-title").textContent = ev.title;
+      document.getElementById("prog-author").textContent = ev.author ?? "";
+    }
+
+    setProgress(pct, msg, status);
+
+    if (status === "done") {
+      currentSSE?.close();
+      lastResultFilename = ev.filename ?? null;
+      document.getElementById("done-actions").classList.add("visible");
+      document.getElementById("analyze-btn").disabled = false;
+      document.getElementById("analyze-btn").textContent = "Анализировать снова";
+      loadBooks();
+    }
+    if (status === "error") {
+      currentSSE?.close();
+      document.getElementById("analyze-btn").disabled = false;
+      document.getElementById("analyze-btn").textContent = "Попробовать снова";
+    }
+  }
+
+  function setProgress(pct, msg, status) {
+    const bar = document.getElementById("prog-bar");
+    bar.style.width = pct + "%";
+    bar.className = "progress-bar-fill";
+    if (status === "done")  bar.classList.add("done");
+    if (status === "error") bar.classList.add("error");
+    document.getElementById("prog-pct").textContent = pct + "%";
+    document.getElementById("prog-msg").textContent = msg;
+  }
+
+  function resetForm() {
+    selectedFile = null;
+    dropZone.classList.remove("has-file");
+    document.getElementById("drop-text").innerHTML =
+      "<strong>Перетащите .epub</strong> сюда<br>или кликните для выбора файла";
+    document.getElementById("drop-hint").textContent = "Поддерживается формат .epub";
+    document.getElementById("progress-section").classList.remove("visible");
+    document.getElementById("done-actions").classList.remove("visible");
+    const btn = document.getElementById("analyze-btn");
+    btn.disabled = true;
+    btn.textContent = "Выбрать файл";
+    fileInput.value = "";
+  }
+
+  // ── Библиотека ────────────────────────────────────────
+  async function loadBooks() {
+    const grid = document.getElementById("books-grid");
+    try {
+      const res = await fetch("/api/books");
+      const books = await res.json();
+      if (!books.length) {
+        grid.innerHTML = `<div class="empty-state"><div>📚</div>Обработанных книг пока нет</div>`;
+        return;
+      }
+      grid.innerHTML = books.map(b => `
+        <div class="book-card" onclick="viewBook('${escAttr(b.filename)}', '${escAttr(b.title)}', '${escAttr(b.author)}')">
+          <div class="bc-icon">📖</div>
+          <div class="bc-title">${escHtml(b.title)}</div>
+          <div class="bc-author">${escHtml(b.author)}</div>
+          <div class="bc-file">${escHtml(b.filename)}</div>
+        </div>
+      `).join("");
+    } catch {
+      grid.innerHTML = `<div class="empty-state"><div>⚠️</div>Не удалось загрузить список книг</div>`;
+    }
+  }
+
+  // ── Просмотр результата ───────────────────────────────
+  async function viewBook(filename, title, author) {
+    openModal(title, author);
+    document.getElementById("modal-pre").textContent = "Загружаю…";
+    try {
+      const res = await fetch(`/api/books/${encodeURIComponent(filename)}`);
+      const data = await res.json();
+      document.getElementById("modal-pre").textContent = data.content ?? data.error;
+    } catch {
+      document.getElementById("modal-pre").textContent = "Ошибка загрузки";
+    }
+  }
+
+  async function viewLastResult() {
+    if (!lastResultFilename) return;
+    viewBook(lastResultFilename, document.getElementById("prog-title").textContent,
+             document.getElementById("prog-author").textContent);
+  }
+
+  function openModal(title, author) {
+    document.getElementById("modal-title").textContent  = title  || "—";
+    document.getElementById("modal-author").textContent = author || "—";
+    document.getElementById("modal-overlay").classList.add("visible");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeModal() {
+    document.getElementById("modal-overlay").classList.remove("visible");
+    document.body.style.overflow = "";
+  }
+
+  function maybeCloseModal(e) {
+    if (e.target === document.getElementById("modal-overlay")) closeModal();
+  }
+
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+  // ── Утилиты ───────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                    .replace(/"/g,"&quot;");
+  }
+  function escAttr(s) {
+    return String(s).replace(/'/g,"\\'").replace(/\n/g,"");
+  }
+
+  // ── Инициализация ─────────────────────────────────────
+  loadBooks();
+</script>
+</body>
+</html>

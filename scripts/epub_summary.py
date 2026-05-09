@@ -118,7 +118,6 @@ STRINGS = {
 
 
 def t(lang: str, key: str, **kwargs) -> str:
-    """Возвращает локализованную строку."""
     return STRINGS[lang][key].format(**kwargs)
 
 
@@ -233,11 +232,6 @@ def extract_chapters(book: epub.EpubBook) -> list[dict]:
 
 
 def build_book_context(chapters: list[dict], detail: str) -> str:
-    """Формирует контекст книги: заголовки + фрагменты глав.
-
-    short — первые 300 символов каждой главы (2 предложения в промпте)
-    full  — первые 800 символов каждой главы (5 предложений в промпте)
-    """
     preview_len = 300 if detail == "short" else 800
     parts = []
     for i, ch in enumerate(chapters, 1):
@@ -362,59 +356,54 @@ def generate_verdict(context: str, metadata: dict, lang: str) -> str:
     return ask_model(system, prompt)
 
 
-# ─── Точка входа ──────────────────────────────────────────────────────────────
+# ─── Основная функция анализа (для CLI и веб-интерфейса) ──────────────────────
 
-def main():
-    args = parse_args()
-    lang = args.lang
-    detail = args.detail
+def run_analysis(
+    epub_path: Path,
+    lang: str,
+    detail: str,
+    output_path: Path,
+    on_progress=None,
+) -> tuple[Path, dict]:
+    """
+    Анализирует epub и сохраняет результат в output_path.
+    on_progress(percent, message, **extra) — опциональный колбэк прогресса.
+    Возвращает (output_path, metadata).
+    """
+    def progress(pct: int, msg: str, **extra):
+        if on_progress:
+            on_progress(pct, msg, **extra)
 
-    epub_path = validate_epub_path(args.epub_file, lang)
-    output_path = resolve_output_path(epub_path, args.output, lang)
-
-    print(t(lang, "processing", name=epub_path.name))
-    print()
-
-    print(t(lang, "checking_model", model=OLLAMA_MODEL))
+    progress(5, t(lang, "checking_model", model=OLLAMA_MODEL))
     check_ollama_model(lang)
-    print(t(lang, "model_ready"))
-    print()
 
-    print(t(lang, "reading"))
+    progress(15, t(lang, "reading"))
     try:
         book = epub.read_epub(str(epub_path))
     except Exception as e:
-        print(t(lang, "err_read_epub", err=e))
-        sys.exit(1)
+        raise RuntimeError(t(lang, "err_read_epub", err=e))
 
     metadata = extract_book_metadata(book)
-    print(t(lang, "title", title=metadata["title"]))
-    print(t(lang, "author", author=metadata["author"]))
-
     chapters = extract_chapters(book)
     if not chapters:
-        print(t(lang, "err_no_chapters"))
-        sys.exit(1)
+        raise RuntimeError(t(lang, "err_no_chapters"))
 
-    print(t(lang, "chapters_found", n=len(chapters)))
-    print()
+    # Передаём название и автора вместе с прогрессом — веб-интерфейс покажет их
+    progress(20, t(lang, "chapters_found", n=len(chapters)),
+             title=metadata["title"], author=metadata["author"], chapters=len(chapters))
 
     context = build_book_context(chapters, detail)
 
-    print(t(lang, "writing_summary"))
+    progress(30, t(lang, "writing_summary"))
     summary = generate_summary(context, metadata, lang, detail)
-    print(t(lang, "done_summary", n=len(summary)))
-    print()
 
-    print(t(lang, "writing_ideas"))
+    progress(60, t(lang, "writing_ideas"))
     key_ideas = generate_key_ideas(context, metadata, lang, detail)
-    print(t(lang, "done_ideas"))
-    print()
 
-    print(t(lang, "writing_verdict"))
+    progress(80, t(lang, "writing_verdict"))
     verdict = generate_verdict(context, metadata, lang)
-    print(t(lang, "done_verdict"))
-    print()
+
+    progress(95, "Сохраняю..." if lang == "ru" else "Saving...")
 
     detail_label = t(lang, "detail_short") if detail == "short" else t(lang, "detail_full")
     sep = "=" * 60
@@ -450,8 +439,37 @@ def main():
         t(lang, "footer"),
         sep,
     ]
-
     output_path.write_text("\n".join(lines), encoding="utf-8")
+
+    return output_path, metadata
+
+
+# ─── Точка входа CLI ──────────────────────────────────────────────────────────
+
+def main():
+    args = parse_args()
+    lang = args.lang
+    detail = args.detail
+
+    epub_path = validate_epub_path(args.epub_file, lang)
+    output_path = resolve_output_path(epub_path, args.output, lang)
+
+    print(t(lang, "processing", name=epub_path.name))
+    print()
+
+    def on_progress(pct: int, msg: str, **extra):
+        print(msg)
+        if "title" in extra:
+            print(t(lang, "title", title=extra["title"]))
+            print(t(lang, "author", author=extra["author"]))
+
+    try:
+        output_path, _ = run_analysis(epub_path, lang, detail, output_path, on_progress)
+    except RuntimeError as e:
+        print(str(e))
+        sys.exit(1)
+
+    print()
     print(t(lang, "success", path=output_path))
 
     try:
