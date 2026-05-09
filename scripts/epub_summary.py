@@ -267,11 +267,16 @@ def generate_summary(context: str, metadata: dict, lang: str, detail: str) -> st
             "markdown-заголовков (#, ##), списков со звёздочками или дефисами."
         )
         prompt = (
-            f"ЗАДАНИЕ: напиши краткое содержание книги сплошным текстом от {length_hint} символов.\n"
+            f"ЗАДАНИЕ: напиши краткое содержание книги объёмом {length_hint} символов.\n"
             f"На каждую главу — примерно {sentences_per_chapter} предложения.\n"
             f"Книга: «{metadata['title']}», автор: {metadata['author']}.\n\n"
             f"Фрагменты глав:\n{context}\n\n"
-            f"Напиши краткое содержание книги (сплошной текст, {length_hint} символов):"
+            f"Требования к оформлению:\n"
+            f"- Раздели текст на логические абзацы (3–6 предложений в абзаце).\n"
+            f"- Между абзацами — пустая строка.\n"
+            f"- Каждый абзац начинается с новой мысли или этапа книги.\n"
+            f"- Никаких заголовков, звёздочек, нумерации.\n\n"
+            f"Напиши краткое содержание книги:"
         )
     else:
         system = (
@@ -281,11 +286,16 @@ def generate_summary(context: str, metadata: dict, lang: str, detail: str) -> st
             "markdown headers (#, ##), bullet points, or dashes."
         )
         prompt = (
-            f"TASK: write a summary of the book as a continuous text of {length_hint} characters.\n"
+            f"TASK: write a summary of the book of {length_hint} characters.\n"
             f"Cover each chapter in approximately {sentences_per_chapter} sentences.\n"
             f"Book: \"{metadata['title']}\", author: {metadata['author']}.\n\n"
             f"Chapter excerpts:\n{context}\n\n"
-            f"Write the book summary (continuous text, {length_hint} characters):"
+            f"Formatting requirements:\n"
+            f"- Divide the text into logical paragraphs (3–6 sentences each).\n"
+            f"- Leave a blank line between paragraphs.\n"
+            f"- Each paragraph begins with a new idea or stage of the book.\n"
+            f"- No headers, asterisks, or numbering.\n\n"
+            f"Write the book summary:"
         )
     return ask_model(system, prompt)
 
@@ -343,7 +353,11 @@ def generate_verdict(context: str, metadata: dict, lang: str) -> str:
             f"Если книга — пересказ известного, мотивационная вода или саморeklama автора — это «НЕТ».\n\n"
             f"Напиши ровно два абзаца:\n"
             f"1. Первый абзац начинается со слова «ДА» или «НЕТ» и содержит вердикт (1–2 предложения).\n"
-            f"2. Второй абзац — конкретное объяснение с указанием слабых или сильных мест (2–3 предложения)."
+            f"2. Второй абзац — конкретное объяснение слабых или сильных мест (2–3 предложения).\n"
+            f"   ВАЖНО: если вердикт «НЕТ», второй абзац ОБЯЗАН заканчиваться фразой вида:\n"
+            f"   «Вместо этого читай: «Название1» (Автор1), «Название2» (Автор2), «Название3» (Автор3).»\n"
+            f"   Это должны быть РЕАЛЬНЫЕ существующие книги, напрямую связанные с темой данной книги. "
+            f"   Фраза «более глубокие работы» без названий ЗАПРЕЩЕНА."
         )
     else:
         system = (
@@ -365,7 +379,11 @@ def generate_verdict(context: str, metadata: dict, lang: str) -> str:
             f"If the book is a rehash of known ideas, motivational filler, or self-promotion — that's a \"NO\".\n\n"
             f"Write exactly two paragraphs:\n"
             f"1. The first paragraph starts with \"YES\" or \"NO\" and states the verdict (1–2 sentences).\n"
-            f"2. The second paragraph gives a specific explanation citing concrete strengths or weaknesses (2–3 sentences)."
+            f"2. The second paragraph gives a specific explanation of strengths or weaknesses (2–3 sentences).\n"
+            f"   IMPORTANT: if the verdict is \"NO\", the second paragraph MUST end with a line like:\n"
+            f"   \"Instead, read: 'Title1' (Author1), 'Title2' (Author2), 'Title3' (Author3).\"\n"
+            f"   These must be REAL existing books directly related to this book's topic. "
+            f"   Vague phrases like 'deeper works' without titles are FORBIDDEN."
         )
     return ask_model(system, prompt)
 

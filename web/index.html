@@ -379,6 +379,7 @@
           <small id="drop-hint" style="display:block;margin-top:6px">Поддерживается формат .epub</small>
         </div>
         <input type="file" id="file-input" accept=".epub" />
+        <div id="dbg" style="margin-top:8px;font-size:11px;color:#64748b;min-height:16px;word-break:break-all;"></div>
 
         <div class="settings">
           <div class="setting-row">
@@ -487,14 +488,42 @@
   // Overlay — единственный реальный drop-target.
   // Safari требует preventDefault на том элементе, над которым находится курсор.
   // Overlay перекрывает SVG и текст, устраняя проблему дочерних элементов.
-  overlay.addEventListener("dragover", e => e.preventDefault());
-  overlay.addEventListener("drop", e => {
+  function dbg(msg) {
+    const el = document.getElementById("dbg");
+    if (el) el.textContent = msg;
+  }
+
+  function handleDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     dropZone.classList.remove("drag-over");
-    const f = e.dataTransfer.files[0];
-    if (f && f.name.toLowerCase().endsWith(".epub")) setFile(f);
+
+    const files = e.dataTransfer.files;
+    const items = e.dataTransfer.items;
+    const types = Array.from(e.dataTransfer.types || []).join(", ");
+    dbg(`drop: files=${files.length}, items=${items.length}, types=[${types}]`);
+
+    let f = files[0];
+    if (!f && items.length > 0 && items[0].kind === "file") f = items[0].getAsFile();
+
+    if (f) {
+      dbg(`файл: "${f.name}"`);
+      const name = f.name.toLowerCase();
+      // Safari добавляет .zip к epub при drag из Finder (epub — zip-архив)
+      if (name.endsWith(".epub") || name.endsWith(".epub.zip")) setFile(f);
+      else dbg(`не .epub: "${f.name}"`);
+    } else {
+      dbg("файл не найден в dataTransfer");
+    }
+  }
+
+  // Вешаем dragover+drop на ВСЕ элементы внутри зоны —
+  // Safari требует preventDefault именно на элементе под курсором.
+  [dropZone, ...dropZone.querySelectorAll("*")].forEach(el => {
+    el.addEventListener("dragover", e => { e.preventDefault(); e.stopPropagation(); });
+    el.addEventListener("drop", handleDrop);
   });
+
   overlay.addEventListener("click", () => fileInput.click());
 
   fileInput.addEventListener("change", () => {

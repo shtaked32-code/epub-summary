@@ -9,6 +9,7 @@ import json
 import shutil
 import sys
 import uuid
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -23,6 +24,93 @@ BOOKS_DIR  = OUTPUT_DIR / "Book"
 UPLOAD_DIR = OUTPUT_DIR / ".uploads"
 BOOKS_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+def _unwrap_safari_zip(epub_path: Path) -> None:
+    """Safari при drag-and-drop упаковывает epub в zip, где содержимое лежит
+    внутри папки BookName.epub/. Пересобираем правильный epub-архив."""
+    import io
+    try:
+        with zipfile.ZipFile(epub_path) as zf:
+            names = zf.namelist()
+
+            # Уже валидный epub — ничего делать не нужно
+            if "META-INF/container.xml" in names:
+                return
+
+            # Safari-случай: BookName.epub/META-INF/container.xml
+            epub_prefix = None
+            for name in names:
+                if name.endswith(".epub/META-INF/container.xml"):
+                    epub_prefix = name[: -len("META-INF/container.xml")]
+                    break
+
+            if not epub_prefix:
+                # Запасной вариант: внутри лежит один .epub-файл
+                epub_members = [n for n in names if n.lower().endswith(".epub")]
+                if epub_members:
+                    epub_path.write_bytes(zf.read(epub_members[0]))
+                return
+
+            # Пересобираем epub: strip prefix, mimetype первым и без сжатия
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as out:
+                mimetype_key = epub_prefix + "mimetype"
+                if mimetype_key in names:
+                    info = zipfile.ZipInfo("mimetype")
+                    info.compress_type = zipfile.ZIP_STORED
+                    out.writestr(info, zf.read(mimetype_key))
+                for item in zf.infolist():
+                    n = item.filename
+                    if not n.startswith(epub_prefix):
+                        continue
+                    if "__MACOSX" in n:
+                        continue
+                    new_name = n[len(epub_prefix):]
+                    if not new_name or new_name == "mimetype":
+                        continue  # уже добавили / папка
+                    out.writestr(new_name, zf.read(n))
+            epub_path.write_bytes(buf.getvalue())
+
+    except Exception as e:
+        print(f"[DEBUG] _unwrap_safari_zip error: {e}", flush=True)
+
+
+def _fix_epub_namespace(epub_path: Path) -> None:
+    """Некоторые epub имеют неправильный namespace в container.xml.
+    ebooklib требует urn:oasis:names:tc:opendocument:xmlns:container.
+    Пересобираем zip с исправленным container.xml если нужно."""
+    import io
+    CORRECT_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
+    try:
+        with zipfile.ZipFile(epub_path) as zf:
+            if "META-INF/container.xml" not in zf.namelist():
+                return
+            raw = zf.read("META-INF/container.xml")
+            text = raw.decode("utf-8", errors="replace")
+            if CORRECT_NS in text:
+                return  # namespace уже правильный
+            # Заменяем любой вариант xmlns= в теге container на правильный
+            import re
+            fixed = re.sub(
+                r'(xmlns\s*=\s*")[^"]*(")',
+                rf'\g<1>{CORRECT_NS}\g<2>',
+                text,
+            )
+            if fixed == text:
+                return  # ничего не поменялось
+            fixed_bytes = fixed.encode("utf-8")
+            # Пересобираем zip
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as out:
+                for item in zf.infolist():
+                    if item.filename == "META-INF/container.xml":
+                        out.writestr(item.filename, fixed_bytes)
+                    else:
+                        out.writestr(item.filename, zf.read(item.filename))
+            epub_path.write_bytes(buf.getvalue())
+    except Exception as e:
+        print(f"[DEBUG] _fix_epub_namespace error: {e}", flush=True)
 
 
 def _extract_verdict(content: str) -> str:
@@ -86,6 +174,11 @@ async def analyze(
     epub_path = UPLOAD_DIR / f"{job_id}.epub"
     with epub_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
+
+    # Safari упаковывает epub в zip — распаковываем если нужно
+    _unwrap_safari_zip(epub_path)
+    # Исправляем неправильный namespace в container.xml если нужно
+    _fix_epub_namespace(epub_path)
 
     original_stem = Path(file.filename).stem
     output_path = BOOKS_DIR / f"{original_stem}.txt"
