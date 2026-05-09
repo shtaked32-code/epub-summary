@@ -19,8 +19,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from epub_summary import run_analysis
 
 OUTPUT_DIR = Path("/Users/seregafrolov/Documents/Claude/v0005")
+BOOKS_DIR  = OUTPUT_DIR / "Book"
 UPLOAD_DIR = OUTPUT_DIR / ".uploads"
+BOOKS_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+def _extract_verdict(content: str) -> str:
+    """Возвращает 'yes', 'no' или '' если вердикт не найден."""
+    in_section = False
+    for line in content.splitlines():
+        s = line.strip()
+        if "СТОИТ ЛИ ЧИТАТЬ" in s or "WORTH READING" in s:
+            in_section = True
+            continue
+        if in_section and s and not s.startswith("="):
+            u = s.upper()
+            if u.startswith("ДА") or u.startswith("YES"):
+                return "yes"
+            if u.startswith("НЕТ") or u.startswith("NO"):
+                return "no"
+            return ""
+    return ""
 
 app = FastAPI(title="Epub Анализатор")
 executor = ThreadPoolExecutor(max_workers=2)
@@ -61,7 +81,7 @@ async def analyze(
         shutil.copyfileobj(file.file, f)
 
     original_stem = Path(file.filename).stem
-    output_path = OUTPUT_DIR / f"{original_stem}.txt"
+    output_path = BOOKS_DIR / f"{original_stem}.txt"
 
     asyncio.create_task(_run_job(job_id, epub_path, output_path, lang, detail))
     return {"job_id": job_id}
@@ -134,7 +154,7 @@ async def progress_stream(job_id: str):
 async def list_books():
     books = []
     for txt in sorted(
-        OUTPUT_DIR.glob("*.txt"),
+        BOOKS_DIR.glob("*.txt"),
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     ):
@@ -152,6 +172,7 @@ async def list_books():
             "filename": txt.name,
             "title": title,
             "author": author,
+            "verdict": _extract_verdict(content),
             "mtime": txt.stat().st_mtime,
         })
     return books
@@ -161,9 +182,8 @@ async def list_books():
 async def get_book(filename: str):
     if any(c in filename for c in "/\\"):
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
-    txt_path = (OUTPUT_DIR / filename).resolve()
-    # Защита от path traversal
-    if OUTPUT_DIR not in txt_path.parents and txt_path.parent != OUTPUT_DIR:
+    txt_path = (BOOKS_DIR / filename).resolve()
+    if txt_path.parent != BOOKS_DIR:
         return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not txt_path.exists() or txt_path.suffix != ".txt":
         return JSONResponse({"error": "Not found"}, status_code=404)

@@ -403,7 +403,7 @@ def run_analysis(
     progress(80, t(lang, "writing_verdict"))
     verdict = generate_verdict(context, metadata, lang)
 
-    progress(95, "Сохраняю..." if lang == "ru" else "Saving...")
+    progress(93, "Сохраняю..." if lang == "ru" else "Saving...")
 
     detail_label = t(lang, "detail_short") if detail == "short" else t(lang, "detail_full")
     sep = "=" * 60
@@ -440,6 +440,13 @@ def run_analysis(
         sep,
     ]
     output_path.write_text("\n".join(lines), encoding="utf-8")
+
+    # Выгружаем модель из памяти после завершения — освобождаем GPU/CPU.
+    progress(98, "Выгружаю модель..." if lang == "ru" else "Unloading model...")
+    try:
+        ollama.generate(model=OLLAMA_MODEL, prompt="", keep_alive=0)
+    except Exception:
+        pass
 
     return output_path, metadata
 
