@@ -60,10 +60,17 @@ def _push(job_id: str, event: dict) -> None:
 
 # ─── Маршруты ─────────────────────────────────────────────────────────────────
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
+def _html() -> HTMLResponse:
     html_path = Path(__file__).parent / "index.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return _html()
+
+@app.get("/book", response_class=HTMLResponse)
+async def index_book():
+    return _html()
 
 
 @app.post("/api/analyze")
