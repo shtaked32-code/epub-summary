@@ -98,6 +98,8 @@
     #drop-zone p { font-size: 14px; color: var(--muted); line-height: 1.5; }
     #drop-zone p strong { color: var(--text); }
     #drop-zone small { font-size: 12px; color: var(--muted); }
+    /* Дочерние элементы не должны перехватывать drag-события */
+    #drop-zone * { pointer-events: none; }
     #file-input { display: none; }
 
     /* ── Настройки ── */
@@ -348,7 +350,7 @@
       <div class="card-head">Загрузка книги</div>
       <div class="card-body">
 
-        <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div id="drop-zone">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 12px">
             <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/>
           </svg>
@@ -449,17 +451,37 @@
   const dropZone = document.getElementById("drop-zone");
   const fileInput = document.getElementById("file-input");
 
-  dropZone.addEventListener("dragover", e => {
+  // Счётчик входов: dragenter/dragleave срабатывают на дочерних элементах,
+  // поэтому отслеживаем вложенность вместо простого toggle.
+  let dragDepth = 0;
+
+  // Блокируем дроп по всему документу — иначе браузер откроет файл.
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop",     e => e.preventDefault());
+
+  dropZone.addEventListener("dragenter", e => {
     e.preventDefault();
+    dragDepth++;
     dropZone.classList.add("drag-over");
   });
-  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("dragleave", () => {
+    dragDepth--;
+    if (dragDepth === 0) dropZone.classList.remove("drag-over");
+  });
+  dropZone.addEventListener("dragover", e => e.preventDefault());
   dropZone.addEventListener("drop", e => {
     e.preventDefault();
+    dragDepth = 0;
     dropZone.classList.remove("drag-over");
     const f = e.dataTransfer.files[0];
-    if (f && f.name.endsWith(".epub")) setFile(f);
+    if (f && f.name.toLowerCase().endsWith(".epub")) setFile(f);
   });
+
+  // Клик открывает диалог только если нет активного drag.
+  dropZone.addEventListener("click", () => {
+    if (dragDepth === 0) fileInput.click();
+  });
+
   fileInput.addEventListener("change", () => {
     if (fileInput.files[0]) setFile(fileInput.files[0]);
   });
