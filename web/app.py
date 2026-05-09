@@ -114,20 +114,30 @@ def _fix_epub_namespace(epub_path: Path) -> None:
 
 
 def _extract_verdict(content: str) -> str:
-    """Возвращает 'yes', 'no' или '' если вердикт не найден."""
+    """Возвращает 'yes', 'no' или '' если вердикт не найден.
+    Ищет ДА/НЕТ в первых нескольких строках секции — на случай если модель
+    не начала ответ с нужного слова."""
+    import re
     in_section = False
+    lines_checked = 0
     for line in content.splitlines():
         s = line.strip()
         if "СТОИТ ЛИ ЧИТАТЬ" in s or "WORTH READING" in s:
             in_section = True
             continue
-        if in_section and s and not s.startswith("="):
-            u = s.upper()
-            if u.startswith("ДА") or u.startswith("YES"):
-                return "yes"
-            if u.startswith("НЕТ") or u.startswith("NO"):
-                return "no"
-            return ""
+        if not in_section or s.startswith("="):
+            continue
+        if not s:
+            continue
+        lines_checked += 1
+        u = s.upper()
+        # Ищем ДА/НЕТ/YES/NO в любом месте строки (не только в начале)
+        if re.search(r'\bДА\b', u) or u.startswith("YES") or re.search(r'\bYES\b', u):
+            return "yes"
+        if re.search(r'\bНЕТ\b', u) or u.startswith("NO") or re.search(r'\bNO\b', u):
+            return "no"
+        if lines_checked >= 3:
+            break  # смотрим только первые 3 строки секции
     return ""
 
 app = FastAPI(title="Epub Анализатор")
